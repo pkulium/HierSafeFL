@@ -9,7 +9,7 @@ import torch
 import random
 from phe import paillier
 import numpy as np
-epsilon = 1e-5
+epsilon = 1e-9
 
 class Cloud():
 
@@ -92,7 +92,7 @@ class Cloud():
         n = len(similarity_client_referecne)
         cos = torch.nn.CosineSimilarity(dim=0, eps=1e-9)
         tao = np.zeros((n))
-        topk = 5
+        topk = 10
         t = 0.5
         delta = 0.1
 
@@ -122,7 +122,8 @@ class Cloud():
         #  Pardoning: reweight by the max value seen
         self.client_learning_rate = np.ones((n)) - tao
         self.client_learning_rate /= np.max(self.client_learning_rate)
-        self.client_learning_rate = (np.log((self.client_learning_rate / (1 - self.client_learning_rate + epsilon)) + epsilon) + 0.5)
+        self.client_learning_rate[self.client_learning_rate==1] = 0.99
+        self.client_learning_rate = (np.log((self.client_learning_rate / (1 - self.client_learning_rate)) + epsilon) + 0.5)
         self.client_learning_rate[(np.isinf(self.client_learning_rate) + self.client_learning_rate > 1)] = 1
         self.client_learning_rate[(self.client_learning_rate < 0)] = 0
         self.client_learning_rate /= np.sum(self.client_learning_rate)
