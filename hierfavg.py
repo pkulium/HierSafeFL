@@ -64,7 +64,9 @@ def initialize_edges_iid(num_edges, clients, args, client_class_dis):
             client_class_dis[label] = list(set(client_class_dis[label]) - set(assigned_client_idx))
         edges.append(Edge(id = eid,
                           cids=assigned_clients_idxes,
-                          shared_layers=copy.deepcopy(clients[0].model.shared_layers)))
+                          shared_layers=copy.deepcopy(clients[0].model.shared_layers),
+                          total_clients = args.num_clients,
+                          ))
         [edges[eid].client_register(clients[client]) for client in assigned_clients_idxes]
         edges[eid].all_trainsample_num = sum(edges[eid].sample_registration.values())
         p_clients[eid] = [sample / float(edges[eid].all_trainsample_num)
@@ -83,7 +85,9 @@ def initialize_edges_iid(num_edges, clients, args, client_class_dis):
             client_class_dis[label] = list(set(client_class_dis[label]) - set(assigned_client_idx))
     edges.append(Edge(id=eid,
                       cids=assigned_clients_idxes,
-                      shared_layers=copy.deepcopy(clients[0].model.shared_layers)))
+                      shared_layers=copy.deepcopy(clients[0].model.shared_layers),
+                      total_clients = args.num_clients,
+                      ))
     [edges[eid].client_register(clients[client]) for client in assigned_clients_idxes]
     edges[eid].all_trainsample_num = sum(edges[eid].sample_registration.values())
     p_clients[eid] = [sample / float(edges[eid].all_trainsample_num)
@@ -123,7 +127,9 @@ def initialize_edges_niid(num_edges, clients, args, client_class_dis):
                     assigned_clients_idxes.append(idx)
         edges.append(Edge(id = eid,
                           cids=assigned_clients_idxes,
-                          shared_layers=copy.deepcopy(clients[0].model.shared_layers)))
+                          shared_layers=copy.deepcopy(clients[0].model.shared_layers),
+                          total_clients = args.num_clients,
+                          ))
         [edges[eid].client_register(clients[client]) for client in assigned_clients_idxes]
         edges[eid].all_trainsample_num = sum(edges[eid].sample_registration.values())
         p_clients[eid] = [sample / float(edges[eid].all_trainsample_num)
@@ -143,7 +149,9 @@ def initialize_edges_niid(num_edges, clients, args, client_class_dis):
             client_class_dis[label] = list(set(client_class_dis[label]) - set(assigned_client_idx))
     edges.append(Edge(id=eid,
                       cids=assigned_clients_idxes,
-                      shared_layers=copy.deepcopy(clients[0].model.shared_layers)))
+                      shared_layers=copy.deepcopy(clients[0].model.shared_layers),
+                      total_clients = args.num_clients,
+                      ))
     [edges[eid].client_register(clients[client]) for client in assigned_clients_idxes]
     edges[eid].all_trainsample_num = sum(edges[eid].sample_registration.values())
     p_clients[eid] = [sample / float(edges[eid].all_trainsample_num)
@@ -276,7 +284,9 @@ def HierFAVG(args):
             edges.append(Edge(id = i,
                               cids = selected_cids,
                               shared_layers = copy.deepcopy(clients[0].model.shared_layers),
-                              device=device))
+                              device=device,
+                              total_clients = args.num_clients,
+                              ))
             [edges[i].client_register(clients[cid]) for cid in selected_cids]
             edges[i].all_trainsample_num = sum(edges[i].sample_registration.values())
             p_clients[i] = [sample / float(edges[i].all_trainsample_num) for sample in
