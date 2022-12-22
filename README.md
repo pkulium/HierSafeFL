@@ -21,4 +21,5 @@ python3 hierfavg
 --lr_decay_epoch 1
 --momentum 0
 --weight_decay 0
+--num_honest_clients 40 
 ```
