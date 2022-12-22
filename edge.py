@@ -14,7 +14,7 @@ import math
 from sklearn.metrics.pairwise import cosine_similarity
 class Edge():
 
-    def __init__(self, id, cids, shared_layers, device):
+    def __init__(self, id, cids, shared_layers, device, total_clients):
         """
         id: edge id
         cids: ids of the clients under this edge
@@ -44,6 +44,7 @@ class Edge():
         self.client_reference_similarity = {}
         self.history = {}
         self.device = device
+        self.total_clients = total_clients 
 
     def refresh_edgeserver(self):
         self.receiver_buffer.clear()
@@ -59,10 +60,9 @@ class Edge():
     def receive_from_client(self, message):
         client_id, cshared_state_dict, grad_history = message['client_id'], message['cshared_state_dict'], message['grad_history']
         if client_id not in self.history:
-            self.history[client_id] = {'grad_history': 0, 'cshared_state_dict': None, 'reputation': 1, 'learning_rate': 1/20}
+            self.history[client_id] = {'grad_history': 0, 'cshared_state_dict': None, 'reputation': 1, 'learning_rate': 1/self.total_clients}
         self.history[client_id]['cshared_state_dict'] = cshared_state_dict
         self.history[client_id]['grad_history'] = torch.add(grad_history, self.history[client_id]['grad_history'])
-        # self.history[client_id]['grad_history'] = grad_history
         self.receiver_buffer[client_id] = cshared_state_dict
         return None
 
@@ -98,7 +98,6 @@ class Edge():
         # sample_num = [snum for snum in self.sample_registration.values()]
         # self.shared_state_dict =  aggregator.average_weights(w = received_dict,
         #                                          s_num= sample_num)
-
         self.shared_state_dict = aggregator.average_weights_contra(history = self.history)
 
       
