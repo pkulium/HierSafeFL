@@ -30,14 +30,10 @@ def average_weights_contra(history):
 
 def average_weights_contra_cloud(w, lr):
     #copy the first client's weights
-    """
-    1 0.3 0.7 0.4
-         +
-    """
     w_avg = {key: 0 for key in w[0]}
     for k in w_avg.keys():  #the nn layer loop
         for i in range(len(w)):
-            w_avg[k] += w[i][k]
+            w_avg[k] += w[i][k] 
     return w_avg 
 
 
