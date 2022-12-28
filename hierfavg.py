@@ -220,7 +220,7 @@ def HierFAVG(args):
               f"t1-{args.num_local_update}_t2-{args.num_edge_aggregation}" \
               f"_model_{args.model}iid{args.iid}edgeiid{args.edgeiid}epoch{args.num_communication}" \
               f"bs{args.batch_size}lr{args.lr}lr_decay_rate{args.lr_decay}" \
-              f"lr_decay_epoch{args.lr_decay_epoch}momentum{args.momentum}"
+              f"lr_decay_epoch{args.lr_decay_epoch}momentum{args.momentum}honest_client{args.num_honest_clients}"
     writer = SummaryWriter(comment=FILEOUT)
     # Build dataloaders
     train_loaders, test_loaders, v_train_loader, v_test_loader = get_dataloaders(args)
