@@ -106,9 +106,9 @@ def niid_esize_split(dataset, args, kwargs, is_shuffle = True):
     idxs = np.arange(num_shards * num_imgs)
     # is_shuffle is used to differentiate between train and test
     if is_shuffle:
-        labels = dataset.train_labels
+        labels = dataset.targets
     else:
-        labels = dataset.test_labels
+        labels = dataset.targets
     idxs_labels = np.vstack((idxs, labels))
     idxs_labels = idxs_labels[:, idxs_labels[1,:].argsort()]
     # sort the data according to their label
@@ -135,7 +135,7 @@ def niid_esize_split_train(dataset, args, kwargs, is_shuffle = True):
     dict_users = {i: np.array([]) for i in range(args.num_clients)}
     idxs = np.arange(num_shards * num_imgs)
 #     no need to judge train ans test here
-    labels = dataset.train_labels
+    labels = dataset.targets
     idxs_labels = np.vstack((idxs, labels))
     idxs_labels = idxs_labels[:, idxs_labels[1,:].argsort()]
     idxs = idxs_labels[0,:]
@@ -165,7 +165,7 @@ def niid_esize_split_test(dataset, args, kwargs, split_pattern,  is_shuffle = Fa
     dict_users = {i: np.array([]) for i in range(args.num_clients)}
     idxs = np.arange(num_shards * num_imgs)
     #     no need to judge train ans test here
-    labels = dataset.test_labels
+    labels = dataset.targets
     idxs_labels = np.vstack((idxs, labels))
     idxs_labels = idxs_labels[:, idxs_labels[1, :].argsort()]
     idxs = idxs_labels[0, :]
@@ -191,7 +191,7 @@ def niid_esize_split_train_large(dataset, args, kwargs, is_shuffle = True):
     idx_shard = [i for i in range(num_shards)]
     dict_users = {i: np.array([]) for i in range(args.num_clients)}
     idxs = np.arange(num_shards * num_imgs)
-    labels = dataset.train_labels
+    labels = dataset.targets
     idxs_labels = np.vstack((idxs, labels))
     idxs_labels = idxs_labels[:, idxs_labels[1,:].argsort()]
     idxs = idxs_labels[0,:]
@@ -232,7 +232,7 @@ def niid_esize_split_test_large(dataset, args, kwargs, split_pattern, is_shuffle
     dict_users = {i: np.array([]) for i in range(args.num_clients)}
     idxs = np.arange(len(dataset))
     #     no need to judge train ans test here
-    labels = dataset.test_labels
+    labels = dataset.targets
     idxs_labels = np.vstack((idxs, labels))
     idxs_labels = idxs_labels[:, idxs_labels[1, :].argsort()]
     idxs = idxs_labels[0, :]
@@ -261,9 +261,9 @@ def niid_esize_split_oneclass(dataset, args, kwargs, is_shuffle = True):
     dict_users = {i: np.array([]) for i in range(args.num_clients)}
     idxs = np.arange(num_shards * num_imgs)
     if is_shuffle:
-        labels = dataset.train_labels
+        labels = dataset.targets
     else:
-        labels = dataset.test_labels
+        labels = dataset.targets
     idxs_labels = np.vstack((idxs, labels))
     idxs_labels = idxs_labels[:, idxs_labels[1,:].argsort()]
     idxs = idxs_labels[0,:]
@@ -380,18 +380,18 @@ def show_distribution(dataloader, args):
     """
     if args.dataset == 'mnist':
         try:
-            labels = dataloader.dataset.dataset.train_labels.numpy()
+            labels = dataloader.dataset.dataset.targets.numpy()
         except:
-            print(f"Using test_labels")
-            labels = dataloader.dataset.dataset.test_labels.numpy()
-        # labels = dataloader.dataset.dataset.train_labels.numpy()
+            print(f"Using targets")
+            labels = dataloader.dataset.dataset.targets.numpy()
+        # labels = dataloader.dataset.dataset.targets.numpy()
     elif args.dataset == 'cifar10':
         try:
-            labels = dataloader.dataset.dataset.train_labels
+            labels = dataloader.dataset.dataset.targets
         except:
-            print(f"Using test_labels")
-            labels = dataloader.dataset.dataset.test_labels
-        # labels = dataloader.dataset.dataset.train_labels
+            print(f"Using targets")
+            labels = dataloader.dataset.dataset.targets
+        # labels = dataloader.dataset.dataset.targets
     elif args.dataset == 'fsdd':
         labels = dataloader.dataset.labels
     else:
