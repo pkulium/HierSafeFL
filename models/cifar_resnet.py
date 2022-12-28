@@ -77,6 +77,7 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
         self.linear = nn.Linear(512*block.expansion, num_classes)
+        self.name_layer = {'conv1':self.conv1, 'bn1':self.bn1, 'layer1': self.layer1, 'layer2':self.layer2, 'layer3':self.layer3, 'layer4':self.layer4, 'linear': self.linear}
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
