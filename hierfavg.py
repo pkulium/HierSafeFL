@@ -176,6 +176,7 @@ def all_clients_test(server, clients, cids, device):
 def fast_all_clients_test(v_test_loader, global_nn, device):
     correct_all = 0.0
     total_all = 0.0
+    attack_success = 0.0
     with torch.no_grad():
         for data in v_test_loader:
             inputs, labels = data
@@ -185,7 +186,10 @@ def fast_all_clients_test(v_test_loader, global_nn, device):
             _, predicts = torch.max(outputs, 1)
             total_all += labels.size(0)
             correct_all += (predicts == labels).sum().item()
-    return correct_all, total_all
+            tmp1 = predicts != labels 
+            tmp2 = predicts == 7
+            attack_success += (tmp1 * tmp2).sum().item()
+    return correct_all, total_all, attack_success
 
 def initialize_global_nn(args):
     if args.dataset == 'mnist':
@@ -360,10 +364,14 @@ def HierFAVG(args):
 
         global_nn.load_state_dict(state_dict = copy.deepcopy(cloud.shared_state_dict))
         global_nn.train(False)
-        correct_all_v, total_all_v = fast_all_clients_test(v_test_loader, global_nn, device)
+        correct_all_v, total_all_v, attack_success_all_v = fast_all_clients_test(v_test_loader, global_nn, device)
         avg_acc_v = correct_all_v / total_all_v
+        ave_attack_success_v = attack_success_all_v / total_all_v
         writer.add_scalar(f'All_Avg_Test_Acc_cloudagg_Vtest',
                           avg_acc_v,
+                          num_comm + 1)
+        writer.add_scalar(f'All_Avg_Test_Attack_Success_cloudagg_Vtest',
+                          ave_attack_success_v,
                           num_comm + 1)
 
     writer.close()
