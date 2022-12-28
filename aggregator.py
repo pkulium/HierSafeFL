@@ -41,16 +41,6 @@ def average_weights_edge(history, s_num):
     #copy the first client's weights
     w =  {client_id: history[client_id]['cshared_state_dict'] for client_id in history}
     reputation = {client_id: history[client_id]['reputation'] for client_id in history}
-    
-    # sample_num = list(s_num.values())
-    # total_sample_num = sum(sample_num)
-    # temp_sample_num = sample_num[0]
-    # w_avg = copy.deepcopy(w[list(s_num.keys())[0]])
-    # for k in w_avg.keys():  #the nn layer loop
-    #     for i in list(s_num.keys())[1:]:
-    #         w_avg[k] += torch.mul(w[i][k], reputation[i] * s_num[i]/temp_sample_num)
-    #     w_avg[k] = torch.mul(w_avg[k], temp_sample_num/total_sample_num)
-    # return w_avg
 
     sample_num = list(s_num.values())
     total_sample_num = sum([s_num[id] * reputation[id] for id in s_num])
