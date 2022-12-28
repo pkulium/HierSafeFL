@@ -26,6 +26,7 @@ class Client():
         self.honest = honest
         self.grad_history = 0
         self.device = device
+        self.dataset = args.dataset
 
     def local_update(self, num_iter, device):
         itered_num = 0
@@ -60,7 +61,11 @@ class Client():
             # layers = torch.cat(layers).to(self.device)
             # if torch.linalg.norm(layers) > 1:
             #     layers = layers / torch.linalg.norm(layers)
-            layers = self.model.shared_layers.fc2.weight.grad.flatten()
+            if self.dataset == 'mnist':
+                layers = self.model.shared_layers.fc2.weight.grad.flatten()
+            else:
+                layers = self.model.shared_layers.linear.weight.grad.flatten()
+
             layers = layers / torch.linalg.norm(layers)
             self.grad_history = torch.add(self.grad_history, layers)
 
