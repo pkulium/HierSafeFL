@@ -65,18 +65,6 @@ class Edge():
         self.history[client_id]['grad_history'] = torch.add(grad_history, self.history[client_id]['grad_history'])
         self.receiver_buffer[client_id] = cshared_state_dict
         return None
-
-    def _average_record(self, client_id):
-        # receiver_buffer = self.receiver_buffer[client_id]
-        # w_avg = []
-
-        # for i in range(len(receiver_buffer)):   
-        #     tmp = ([torch.flatten(receiver_buffer[i][k]) for k in receiver_buffer[0].keys()])
-        #     w_avg.append(torch.cat(tmp))
-        # w_avg = torch.mean(torch.stack(w_avg), axis = 0)
-
-        # return w_avg````
-        return self.history[client_id]['grad_history']
         
     def _similarity(self, average_record):
         ret = torch.matmul(self.reference, average_record)
@@ -109,7 +97,7 @@ class Edge():
 
     def send_to_cloudserver(self, cloud):
         for client_id in self.history:
-            average_record = self._average_record(client_id)
+            average_record = self.history[client_id]['grad_history']
             self.client_reference_similarity[client_id] = self._similarity(average_record)
         message =  {'eshared_state_dict': copy.deepcopy(self.shared_state_dict),
                 'client_reference_similarity': copy.deepcopy(self.client_reference_similarity),

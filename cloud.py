@@ -18,7 +18,10 @@ class Cloud():
         self.shared_state_dict = {}
         self.id_registration = []
         self.sample_registration = {}
-        self.init_state = torch.flatten(shared_layers.fc2.weight)
+        if 'fc2' in shared_layers.name_layer:
+            self.init_state = torch.flatten(shared_layers.fc2.weight)
+        else:
+            self.init_state = torch.flatten(shared_layers.linear.weight)
         self.clock = []
         self.client_client_similarity = None
         self.reference_count = 50
