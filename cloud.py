@@ -95,7 +95,7 @@ class Cloud():
         n = len(similarity_client_referecne)
         cos = torch.nn.CosineSimilarity(dim=0, eps=1e-9)
         tao = np.zeros((n))
-        topk = 10
+        topk = n // 5
         t = 0.5
         delta = 0.1
 
