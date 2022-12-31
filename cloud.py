@@ -1,116 +1,190 @@
-# The structure of the client
-# Should include following funcitons
-# 1. Client intialization, dataloaders, model(include optimizer)
-# 2. Client model update
-# 3. Client send updates to server
-# 4. Client receives updates from server
-# 5. Client modify local model based on the feedback from the server
-from torch.autograd import Variable
-import torch
-from models.initialize_model import initialize_model
+# The structure of the server
+# The server should include the following functions:
+# 1. Server initialization
+# 2. Server reveives updates from the user
+# 3. Server send the aggregated messagermation back to clients
 import copy
+import aggregator 
+import torch
+import random
+from phe import paillier
+import numpy as np
+epsilon = 1e-9
 
-class Client():
-    def __init__(self, id, train_loader, test_loader, args, device, honest = True):
-        self.id = id
-        self.train_loader = train_loader
-        self.test_loader = test_loader
-        self.model = initialize_model(args, device)
-        # copy.deepcopy(self.model.shared_layers.state_dict())
+class Cloud():
+
+    def __init__(self, shared_layers, device):
         self.receiver_buffer = {}
-        self.batch_size = args.batch_size
-        #record local update epoch
-        self.epoch = 0
-        # record the time
+        self.shared_state_dict = {}
+        self.id_registration = []
+        self.sample_registration = {}
+        if 'fc2' in shared_layers.name_layer:
+            self.init_state = torch.flatten(shared_layers.fc2.weight)
+        else:
+            self.init_state = torch.flatten(shared_layers.linear.weight)
         self.clock = []
-        self.honest = honest
-        self.grad_history = 0
+        self.client_client_similarity = None
+        self.reference_count = 50
+        self.reference = self.get_reference()
+        self.parameter_count = 0
+        self.public_key, self.private_key = paillier.generate_paillier_keypair()
+        self.s_prime = self.get_s_prime()
+        self.client_reputation = None
         self.device = device
-        self.dataset = args.dataset
+        self.client_learning_rate = None
 
-    def local_update(self, num_iter, device):
-        itered_num = 0
-        loss = 0.0
-        end = False
-        self.grad_history = 0
-        # the upperbound selected in the following is because it is expected that one local update will never reach 1000
-        iter = 1
-        for epoch in range(iter):
-            for data in self.train_loader:
-                inputs, labels = data
-                if not self.honest:
-                    labels.apply_(lambda x: 7)
-                inputs = Variable(inputs).to(device)
-                labels = Variable(labels).to(device)
-                loss += self.model.optimize_model(input_batch=inputs,
-                                                  label_batch=labels)
-                itered_num += 1
-                if itered_num >= num_iter:
-                    end = True
-                    # print(f"Iterer number {itered_num}")
-                    self.epoch += 1
-                    self.model.exp_lr_sheduler(epoch=self.epoch)
-                    # self.model.print_current_lr()
-                    break
-            # layers = []
-            # for name, layer in self.model.shared_layers.name_layer.items():
-            #     if name == 'conv2_drop':
-            #         continue
-            #     layers.append(layer.weight.grad.flatten())
-            #     layers.append(layer.bias.grad.flatten())
-            # layers = torch.cat(layers).to(self.device)
-            # if torch.linalg.norm(layers) > 1:
-            #     layers = layers / torch.linalg.norm(layers)
-            if self.dataset == 'mnist':
-                layers = self.model.shared_layers.fc2.weight.grad.flatten()
+    def refresh_cloudserver(self):
+        self.receiver_buffer.clear()
+        del self.id_registration[:]
+        self.sample_registration.clear()
+        return None
+
+    def edge_register(self, edge):
+        self.id_registration.append(edge.id)
+        self.sample_registration[edge.id] = edge.all_trainsample_num
+        edge.reference = self.reference.to(self.device)
+        return None
+
+    def receive_from_edge(self, message):
+        edge_id = message['id']
+        self.receiver_buffer[edge_id] = {'eshared_state_dict': message['eshared_state_dict'],
+                                        'client_reference_similarity':message['client_reference_similarity']
+                                    }
+        return None
+
+    def foolsgold(self, similarity_client_referecne):
+        similarity_client_referecne = {k:v for tmp in similarity_client_referecne for k,v in tmp.items()}
+        cos = torch.nn.CosineSimilarity(dim=0, eps=1e-9)
+        
+        n = len(similarity_client_referecne)
+        cs = np.zeros((n, n))
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                cs[i][j] = cos(similarity_client_referecne[i], similarity_client_referecne[j]).item()
+        #  Pardoning: reweight by the max value seen
+        maxcs = np.max(cs, axis=1) + epsilon
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                if maxcs[i] < maxcs[j]:
+                    cs[i][j] = cs[i][j] * maxcs[i] / maxcs[j]
+        wv = 1 - (np.max(cs, axis=1))
+        wv[wv > 1] = 1
+        wv[wv < 0] = 0
+
+        # Rescale so that max value is wv
+        wv = wv / np.max(wv)
+        wv[(wv == 1)] = .99
+        
+        # Logit function
+        wv = (np.log((wv / (1 - wv)) + epsilon) + 0.5)
+        wv[(np.isinf(wv) + wv > 1)] = 1
+        wv[(wv < 0)] = 0
+        return cs, wv
+
+    def contra(self, similarity_client_referecne):
+        similarity_client_referecne = {k:v for tmp in similarity_client_referecne for k,v in tmp.items()}
+        if self.client_reputation is None:
+            self.client_reputation = np.ones((len(similarity_client_referecne)))
+        if self.client_learning_rate is None:
+            self.client_learning_rate = np.ones(len(similarity_client_referecne)) 
+
+        n = len(similarity_client_referecne)
+        cos = torch.nn.CosineSimilarity(dim=0, eps=1e-9)
+        tao = np.zeros((n))
+        topk = n // 5
+        t = 0.5
+        delta = 0.1
+
+        cs = np.zeros((n, n))
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                cs[i][j] = cos(similarity_client_referecne[i], similarity_client_referecne[j]).item()
+
+        maxcs = np.max(cs, axis=1) + epsilon
+        for i in range(n):
+            for j in range(n):
+                if i == j:
+                    continue
+                if maxcs[i] < maxcs[j]:
+                    cs[i][j] = cs[i][j] * maxcs[i] / maxcs[j]
+
+        for i in range(n):
+            temp = np.argpartition(-cs[i], topk)
+            tao[i] = np.mean(cs[i][temp[:topk]])
+            if tao[i] > t:
+                self.client_reputation[i] -= delta 
             else:
-                layers = self.model.shared_layers.linear.weight.grad.flatten()
+                self.client_reputation[i] += delta 
 
-            layers = layers / torch.linalg.norm(layers)
-            self.grad_history = torch.add(self.grad_history, layers)
+        #  Pardoning: reweight by the max value seen
+        self.client_learning_rate = np.ones((n)) - tao
+        self.client_learning_rate /= np.max(self.client_learning_rate)
+        self.client_learning_rate[self.client_learning_rate==1] = 0.99
+        self.client_learning_rate = (np.log((self.client_learning_rate / (1 - self.client_learning_rate)) + epsilon) + 0.5)
+        self.client_learning_rate[(np.isinf(self.client_learning_rate) + self.client_learning_rate > 1)] = 1
+        self.client_learning_rate[(self.client_learning_rate < 0)] = 0
+        self.client_learning_rate /= np.sum(self.client_learning_rate)
+        self.client_reputation /= max(self.client_reputation)
+        return cs, self.client_reputation
 
+    def aggregate(self, args):
+        similarity_client_reference = [dict['client_reference_similarity'] for dict in self.receiver_buffer.values()]
+        self.client_client_similarity, self.client_reputation = self.contra(similarity_client_reference)
+   
+        eshared_state_dict = [dict['eshared_state_dict'] for dict in self.receiver_buffer.values()]
+        sample_num = [snum for snum in self.sample_registration.values()]
+        self.shared_state_dict = aggregator.average_weights_contra_cloud(w=eshared_state_dict, lr = self.client_learning_rate)
+        return None
 
-            if end: break
-            self.epoch += 1
-            self.model.exp_lr_sheduler(epoch = self.epoch)
-            # self.model.print_current_lr()
-        # print(itered_num)
-        # print(f'The {self.epoch}')
-        loss /= num_iter
-        return loss
+    def get_client_repuation(self, edge):
+        client_repuation = {}
+        for id in edge.cids:
+            client_repuation[id] = self.client_reputation[id]
+        return client_repuation
 
-    def test_model(self, device):
-        correct = 0.0
-        total = 0.0
-        with torch.no_grad():
-            for data in self.test_loader:
-                inputs, labels = data
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-                outputs = self.model.test_model(input_batch= inputs)
-                _, predict = torch.max(outputs, 1)
-                total += labels.size(0)
-                correct += (predict == labels).sum().item()
-        return correct, total
+    def get_client_learning_rate(self, edge):
+        client_learning_rate =  {}
+        for id in edge.cids:
+            client_learning_rate[id] = self.client_learning_rate[id]
+        return client_learning_rate
 
-    def send_to_edgeserver(self, edgeserver):
+    def send_to_edge(self, edge):
+        client_reputation = self.get_client_repuation(edge)
+        client_learning_rate = self.get_client_learning_rate(edge)
         message = {
-            'client_id': self.id,
-            'cshared_state_dict': copy.deepcopy(self.model.shared_layers.state_dict()),
-            'grad_history': self.grad_history,
+            'shared_state_dict': self.shared_state_dict,
+            'client_reputation': client_reputation,
+            'client_learning_rate': client_learning_rate,
         }
-        edgeserver.receive_from_client(message)
+        edge.receive_from_cloudserver(message)
         return None
 
-    def receive_from_edgeserver(self, message):
-        self.receiver_buffer = message
-        return None
+    def get_reference(self):
+        self.parameter_count = self.init_state.size()[0]
+        self.parameter_count = int(self.parameter_count)
 
-    def sync_with_edgeserver(self):
-        """
-        The global has already been stored in the buffer
-        :return: None
-        """
-        self.model.update_model(self.receiver_buffer)
-        return None
+        nonzero_per_reference =  self.parameter_count // self.reference_count
+        reference = torch.zeros((self.reference_count,  self.parameter_count))
+        parameter_index_random = list(range( self.parameter_count))
+        random.shuffle(parameter_index_random)
+
+        for reference_index in range(self.reference_count):
+            index = parameter_index_random[reference_index * nonzero_per_reference: (reference_index + 1) * nonzero_per_reference]
+            index = torch.tensor(index)
+            reference[reference_index][index] = 1
+        # reference = torch.eye(self.parameter_count)
+        return reference
+    
+    def get_s_prime(self):
+        # a = random.sample(range(0, 100), self.reference.size()[0])
+        # s = torch.matmul(self.reference.T, torch.tensor(a, dtype=torch.float32))
+        # s_prime = [self.public_key.encrypt(x.item()) for x in s]
+        return
+        
 
