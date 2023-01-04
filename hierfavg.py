@@ -297,7 +297,9 @@ def HierFAVG(args):
                     list(edges[i].sample_registration.values())]
             edges[i].refresh_edgeserver()
     # Initialize cloud server
-    cloud = Cloud(shared_layers=copy.deepcopy(clients[0].model.shared_layers), device = device)
+    cloud = Cloud(shared_layers=copy.deepcopy(clients[0].model.shared_layers), device = device, args = args)
+    # First the clients report to the cloud server with secret key
+    [cloud.client_register(client=client) for client in clients]
     # First the clients report to the edge server their training samples
     [cloud.edge_register(edge=edge) for edge in edges]
     p_edge = [sample / sum(cloud.sample_registration.values()) for sample in
@@ -335,6 +337,10 @@ def HierFAVG(args):
                     clients[selected_cid].sync_with_edgeserver()
                     client_loss += clients[selected_cid].local_update(num_iter=args.num_local_update,
                                                                       device = device)
+
+                    clients[selected_cid].send_to_cloud(cloud)
+                    cloud.send_to_client(clients[selected_cid])
+
                     clients[selected_cid].send_to_edgeserver(edge)
                 edge_loss[i] = client_loss
                 edge_sample[i] = sum(edge.sample_registration.values())
@@ -356,6 +362,9 @@ def HierFAVG(args):
         # Now begin the cloud aggregation
         for edge in edges:
             edge.send_to_cloudserver(cloud)
+            cloud.verify_grad(edge.id, edge.cids)
+            cloud.verify_cos(edge.id)
+
         cloud.aggregate(args)
         # if num_comm % 10 == 0:
             # print(cloud.client_reputation)
