@@ -102,6 +102,7 @@ class Edge():
         message =  {'eshared_state_dict': copy.deepcopy(self.shared_state_dict),
                 'client_reference_similarity': copy.deepcopy(self.client_reference_similarity),
                 'id':self.id,
+                'comit': self.comit(),
         }
         cloud.receive_from_edge(message)
         return None
@@ -114,5 +115,11 @@ class Edge():
         for id, client_learning_rate in client_learning_rate.items():
             self.history[id]['learning_rate'] = client_learning_rate
         return None
+
+    def comit(self):
+        grad = 0
+        for client_id in self.history:
+            grad += self.history[client_id]['grad_history']
+        return grad
 
    
