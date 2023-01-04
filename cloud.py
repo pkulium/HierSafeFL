@@ -13,25 +13,32 @@ epsilon = 1e-9
 
 class Cloud():
 
-    def __init__(self, shared_layers, device):
+    def __init__(self, shared_layers, device, args):
         self.receiver_buffer = {}
         self.shared_state_dict = {}
         self.id_registration = []
         self.sample_registration = {}
-        if 'fc2' in shared_layers.name_layer:
+        if args.model == 'lenet':
             self.init_state = torch.flatten(shared_layers.fc2.weight)
-        else:
+        elif args.model == 'cnn_complex':
+            self.init_state = torch.flatten(shared_layers.fc_layer[-1].weight)
+        elif args.model == 'resnet18':
             self.init_state = torch.flatten(shared_layers.linear.weight)
         self.clock = []
         self.client_client_similarity = None
-        self.reference_count = 50
+        self.num_reference = args.num_reference
         self.reference = self.get_reference()
         self.parameter_count = 0
         self.public_key, self.private_key = paillier.generate_paillier_keypair()
+        self.a = None
         self.s_prime = self.get_s_prime()
         self.client_reputation = None
         self.device = device
         self.client_learning_rate = None
+        self.edge_learning_rate = None
+        self.client_comit = {}
+        self.edge_comit = {}
+
 
     def refresh_cloudserver(self):
         self.receiver_buffer.clear()
@@ -48,21 +55,22 @@ class Cloud():
     def receive_from_edge(self, message):
         edge_id = message['id']
         self.receiver_buffer[edge_id] = {'eshared_state_dict': message['eshared_state_dict'],
-                                        'client_reference_similarity':message['client_reference_similarity']
+                                        'client_reference_similarity':message['client_reference_similarity'],
+                                        'comit': message['comit'],
                                     }
         return None
 
-    def foolsgold(self, similarity_client_referecne):
-        similarity_client_referecne = {k:v for tmp in similarity_client_referecne for k,v in tmp.items()}
+    def foolsgold(self, similarity_client_referecence):
+        similarity_client_referecence = {k:v for tmp in similarity_client_referecence for k,v in tmp.items()}
         cos = torch.nn.CosineSimilarity(dim=0, eps=1e-9)
         
-        n = len(similarity_client_referecne)
+        n = len(similarity_client_referecence)
         cs = np.zeros((n, n))
         for i in range(n):
             for j in range(n):
                 if i == j:
                     continue
-                cs[i][j] = cos(similarity_client_referecne[i], similarity_client_referecne[j]).item()
+                cs[i][j] = cos(similarity_client_referecence[i], similarity_client_referecence[j]).item()
         #  Pardoning: reweight by the max value seen
         maxcs = np.max(cs, axis=1) + epsilon
         for i in range(n):
@@ -85,18 +93,19 @@ class Cloud():
         wv[(wv < 0)] = 0
         return cs, wv
 
-    def contra(self, similarity_client_referecne):
-        similarity_client_referecne = {k:v for tmp in similarity_client_referecne for k,v in tmp.items()}
+    def contra(self, similarity_client_referecence):
+        similarity_client_referecence_ = similarity_client_referecence
+        similarity_client_referecence = {k:v for _, tmp in similarity_client_referecence.items() for k,v in tmp.items()}
         if self.client_reputation is None:
-            self.client_reputation = np.ones((len(similarity_client_referecne)))
+            self.client_reputation = np.ones((len(similarity_client_referecence)))
         if self.client_learning_rate is None:
-            self.client_learning_rate = np.ones(len(similarity_client_referecne)) 
+            self.client_learning_rate = np.ones(len(similarity_client_referecence)) 
 
-        n = len(similarity_client_referecne)
+        n = len(similarity_client_referecence)
         cos = torch.nn.CosineSimilarity(dim=0, eps=1e-9)
         tao = np.zeros((n))
         topk = n // 5
-        t = 0.5
+        t = 0.7
         delta = 0.1
 
         cs = np.zeros((n, n))
@@ -104,7 +113,7 @@ class Cloud():
             for j in range(n):
                 if i == j:
                     continue
-                cs[i][j] = cos(similarity_client_referecne[i], similarity_client_referecne[j]).item()
+                cs[i][j] = cos(similarity_client_referecence[i], similarity_client_referecence[j]).item()
 
         maxcs = np.max(cs, axis=1) + epsilon
         for i in range(n):
@@ -131,15 +140,16 @@ class Cloud():
         self.client_learning_rate[(self.client_learning_rate < 0)] = 0
         self.client_learning_rate /= np.sum(self.client_learning_rate)
         self.client_reputation /= max(self.client_reputation)
+
+        self.edge_learning_rate = {id:sum([self.client_learning_rate[k] for k in tmp.keys()]) for id, tmp in similarity_client_referecence_.items()}
         return cs, self.client_reputation
 
     def aggregate(self, args):
-        similarity_client_reference = [dict['client_reference_similarity'] for dict in self.receiver_buffer.values()]
+        similarity_client_reference = {id:dict['client_reference_similarity'] for id, dict in self.receiver_buffer.items()}
         self.client_client_similarity, self.client_reputation = self.contra(similarity_client_reference)
    
         eshared_state_dict = [dict['eshared_state_dict'] for dict in self.receiver_buffer.values()]
-        sample_num = [snum for snum in self.sample_registration.values()]
-        self.shared_state_dict = aggregator.average_weights_contra_cloud(w=eshared_state_dict, lr = self.client_learning_rate)
+        self.shared_state_dict = aggregator.average_weights_contra_cloud(w=eshared_state_dict, lr = self.edge_learning_rate)
         return None
 
     def get_client_repuation(self, edge):
@@ -169,12 +179,12 @@ class Cloud():
         self.parameter_count = self.init_state.size()[0]
         self.parameter_count = int(self.parameter_count)
 
-        nonzero_per_reference =  self.parameter_count // self.reference_count
-        reference = torch.zeros((self.reference_count,  self.parameter_count))
+        nonzero_per_reference =  self.parameter_count // self.num_reference
+        reference = torch.zeros((self.num_reference,  self.parameter_count))
         parameter_index_random = list(range( self.parameter_count))
         random.shuffle(parameter_index_random)
 
-        for reference_index in range(self.reference_count):
+        for reference_index in range(self.num_reference):
             index = parameter_index_random[reference_index * nonzero_per_reference: (reference_index + 1) * nonzero_per_reference]
             index = torch.tensor(index)
             reference[reference_index][index] = 1
@@ -182,9 +192,54 @@ class Cloud():
         return reference
     
     def get_s_prime(self):
-        # a = random.sample(range(0, 100), self.reference.size()[0])
-        # s = torch.matmul(self.reference.T, torch.tensor(a, dtype=torch.float32))
-        # s_prime = [self.public_key.encrypt(x.item()) for x in s]
-        return
+        self.a =  torch.tensor(random.sample(range(0, 100), self.num_reference), dtype=torch.float32)
+        s = torch.matmul(self.reference.T, self.a)
+        s_prime = (s + 1) % 7
+        # s = s.tolist()
+        # s_prime = [self.public_key.encrypt(x) for x in s]
+        # return s_prime
+        return s_prime
         
+    def client_register(self, client):
+        self.send_to_client(client)
+        return
 
+    def receive_from_client(self, message):
+        client_id = message['client_id']
+        comit  = message['comit']
+        self.client_comit[client_id] = comit
+        return
+
+    def comit(self, grad):
+        return grad.dot(self.s_prime) / torch.norm(grad), torch.norm(grad)
+
+    def verify_grad(self, edge_id, cid):
+        self.edge_comit[edge_id] =  self.comit(self.receiver_buffer[edge_id]['comit'])
+        left = self.edge_comit[edge_id][0] * self.edge_comit[edge_id][1]
+        right = sum([self.client_comit[id][0] * self.client_comit[id][1] for id in cid])
+        return left == right
+
+    def verify_cos(self, edge_id):
+        client_reference_similarity = self.receiver_buffer[edge_id]['client_reference_similarity']
+        for id in client_reference_similarity:
+            similarity = client_reference_similarity[id]
+            left = self.client_comit[id][0]
+            right = torch.div(self.a, torch.linalg.norm(self.reference, dim=1))
+            right = torch.matmul(right, similarity)
+            if left != right:
+                return False
+        return True
+
+    def send_to_client(self, client):
+        client_id = client.id
+        if client_id not in self.client_comit:
+            message = {
+                's_prime': self.s_prime,
+                'private_key': 'private_key',
+            }
+            self.client_comit[client_id] = None 
+        else:
+            message = {
+                'receipt': 'receipt',
+            }
+        client.receive_from_cloud(message)
