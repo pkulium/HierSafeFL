@@ -60,16 +60,13 @@ class Client():
                     break
             if self.training_model == 'lenet':
                 layers = self.model.shared_layers.fc2.weight.grad.flatten()
-                layers = layers / torch.linalg.norm(layers)
-                self.grad_history = torch.add(self.grad_history, layers)
             elif self.training_model == 'cnn_complex':
                 layers = self.model.shared_layers.fc_layer[-1].weight.grad.flatten()
-                layers = layers / torch.linalg.norm(layers)
-                self.grad_history = torch.add(self.grad_history, layers)
             elif self.training_model == 'resnet18':
                 layers = self.model.shared_layers.linear.weight.grad.flatten()
-                layers = layers / torch.linalg.norm(layers)
-                self.grad_history = torch.add(self.grad_history, layers)
+            if torch.linalg.norm(layers) > 1:
+                layers /= torch.linalg.norm(layers)
+            self.grad_history = torch.add(self.grad_history, layers)
             if end: break
             self.epoch += 1
             self.model.exp_lr_sheduler(epoch = self.epoch)
