@@ -46,6 +46,10 @@ class cifar_cnn_3conv(nn.Module):
             nn.Linear(512, 10)
         )
 
+        self.name_layer = {
+            'conv_layer': self.conv_layer,
+            'fc_layer': self.fc_layer,
+        }
     def forward(self, x):
         """Perform forward."""
 

@@ -19,21 +19,30 @@ def average_weights_contra(history):
     w =  {client_id: history[client_id]['cshared_state_dict'] for client_id in history}
     reputation = {client_id: history[client_id]['reputation'] for client_id in history}
     learning_rate = {client_id: history[client_id]['learning_rate'] for client_id in history}
-    
+    sum_learning_rate = sum(learning_rate.values())        
     client = list(w.keys())[0]
-    w_avg = {key: 0 for key in w[client]}
+    w_avg = {key: torch.zeros_like(w[client][key]) if 'num_batches_tracked' not in key else w[client][key] for key in w[client]}
+    if sum_learning_rate == 0:
+        return w_avg
     for k in w_avg.keys():  #the nn layer loop
+        if 'num_batches_tracked' in k:
+            continue
         for i in learning_rate:
             w_avg[k] += torch.mul(w[i][k], learning_rate[i])
+        w_avg[k] /= sum_learning_rate
     return w_avg
+
 
 
 def average_weights_contra_cloud(w, lr):
     #copy the first client's weights
-    w_avg = {key: 0 for key in w[0]}
+    client = list(w.keys())[0]
+    w_avg = {key: torch.zeros_like(w[client][key]) if 'num_batches_tracked' not in key else w[client][key] for key in w[client]}
     for k in w_avg.keys():  #the nn layer loop
-        for i in range(len(w)):
-            w_avg[k] += w[i][k] 
+        if 'num_batches_tracked' in k:
+            continue
+        for i in lr:
+            w_avg[k] += w[i][k] * lr[i]
     return w_avg 
 
 

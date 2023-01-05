@@ -170,10 +170,23 @@ def args_parser():
     parser.add_argument(
         '--num_honest_clients',
         type = int,
-        default = 10,
+        default = 50,
         help = 'number of all honest clients'
     )
 
+    parser.add_argument(
+        '--attack',
+        type = str,
+        default = 'target',
+        help = 'type of attack'
+    )
+
+    parser.add_argument(
+        '--num_reference',
+        type = int,
+        default = '50',
+        help = 'type of attack'
+    )
 
     args = parser.parse_args()
     args.cuda = torch.cuda.is_available()
