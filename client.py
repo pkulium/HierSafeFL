@@ -36,6 +36,7 @@ class Client():
         loss = 0.0
         end = False
         self.grad_history = 0
+        layers = None
         # the upperbound selected in the following is because it is expected that one local update will never reach 1000
         for epoch in range(1000):
             for data in self.train_loader:
@@ -48,7 +49,7 @@ class Client():
                 inputs = Variable(inputs).to(device)
                 labels = Variable(labels).to(device)
                 loss += self.model.optimize_model(input_batch=inputs,
-                                                  label_batch=labels)
+                                              label_batch=labels)
                 itered_num += 1
                 if itered_num >= num_iter:
                     end = True
@@ -57,6 +58,18 @@ class Client():
                     self.model.exp_lr_sheduler(epoch=self.epoch)
                     # self.model.print_current_lr()
                     break
+            if self.training_model == 'lenet':
+                layers = self.model.shared_layers.fc2.weight.grad.flatten()
+                layers = layers / torch.linalg.norm(layers)
+                self.grad_history = torch.add(self.grad_history, layers)
+            elif self.training_model == 'cnn_complex':
+                layers = self.model.shared_layers.fc_layer[-1].weight.grad.flatten()
+                layers = layers / torch.linalg.norm(layers)
+                self.grad_history = torch.add(self.grad_history, layers)
+            elif self.training_model == 'resnet18':
+                layers = self.model.shared_layers.linear.weight.grad.flatten()
+                layers = layers / torch.linalg.norm(layers)
+                self.grad_history = torch.add(self.grad_history, layers)
             if end: break
             self.epoch += 1
             self.model.exp_lr_sheduler(epoch = self.epoch)
@@ -64,13 +77,6 @@ class Client():
         # print(itered_num)
         # print(f'The {self.epoch}')
         loss /= num_iter
-        if self.training_model == 'lenet':
-            layers = self.model.shared_layers.fc2.weight.grad.flatten()
-        elif self.training_model == 'cnn_complex':
-            layers = self.model.shared_layers.fc_layer[-1].weight.grad.flatten()
-        elif self.training_model == 'resnet18':
-            layers = self.model.shared_layers.linear.weight.grad.flatten()
-        self.grad_history = layers / torch.linalg.norm(layers)
         return loss
 
     def test_model(self, device):
@@ -110,6 +116,7 @@ class Client():
 
     def comit(self):
         return torch.dot(self.s_prime, self.grad_history) / torch.norm(self.grad_history), torch.norm(self.grad_history)
+
     def send_to_cloud(self, cloud):
         message = {
             'client_id': self.id,

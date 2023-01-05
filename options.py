@@ -170,7 +170,7 @@ def args_parser():
     parser.add_argument(
         '--num_honest_clients',
         type = int,
-        default = 10,
+        default = 50,
         help = 'number of all honest clients'
     )
 

@@ -15,6 +15,7 @@ from models.mnist_cnn import mnist_lenet
 from models.cifar_cnn_3conv_layer import cifar_cnn_3conv
 from models.cifar_resnet import ResNet18
 from models.mnist_logistic import LogisticRegression
+import time
 
 
 def get_client_class(args, clients):
@@ -220,26 +221,26 @@ def HierFAVG(args):
               f"t1-{args.num_local_update}_t2-{args.num_edge_aggregation}" \
               f"_model_{args.model}iid{args.iid}edgeiid{args.edgeiid}epoch{args.num_communication}" \
               f"bs{args.batch_size}lr{args.lr}lr_decay_rate{args.lr_decay}" \
-              f"lr_decay_epoch{args.lr_decay_epoch}momentum{args.momentum}honest_client{args.num_honest_clients}"
+              f"lr_decay_epoch{args.lr_decay_epoch}momentum{args.momentum}honest_client{args.num_honest_clients}attack{args.attack}num_reference{args.num_reference}"
     writer = SummaryWriter(comment=FILEOUT)
     # Build dataloaders
     train_loaders, test_loaders, v_train_loader, v_test_loader = get_dataloaders(args)
     if args.show_dis:
         for i in range(args.num_clients):
             train_loader = train_loaders[i]
-            # print(len(train_loader.dataset))
+            print(len(train_loader.dataset))
             distribution = show_distribution(train_loader, args)
-            # print("train dataloader {} distribution".format(i))
-            # print(distribution)
+            print("train dataloader {} distribution".format(i))
+            print(distribution)
 
         for i in range(args.num_clients):
             test_loader = test_loaders[i]
             test_size = len(test_loaders[i].dataset)
-            # print(len(test_loader.dataset))
+            print(len(test_loader.dataset))
             distribution = show_distribution(test_loader, args)
-            # print("test dataloader {} distribution".format(i))
-            # print(f"test dataloader size {test_size}")
-            # print(distribution)
+            print("test dataloader {} distribution".format(i))
+            print(f"test dataloader size {test_size}")
+            print(distribution)
     # initialize clients and server
     clients = []
     for i in range(args.num_clients):
@@ -311,6 +312,9 @@ def HierFAVG(args):
     if args.cuda:
         global_nn = global_nn.cuda(device)
 
+    training_start_time = time.time()
+    verifying_time = 0
+    training_time = 0
     #Begin training
     for num_comm in tqdm(range(args.num_communication)):
         cloud.refresh_cloudserver()
@@ -337,9 +341,11 @@ def HierFAVG(args):
                     clients[selected_cid].sync_with_edgeserver()
                     client_loss += clients[selected_cid].local_update(num_iter=args.num_local_update,
                                                                       device = device)
-
+                    verifying_start_time = time.time()
                     clients[selected_cid].send_to_cloud(cloud)
                     cloud.send_to_client(clients[selected_cid])
+                    verifying_end_time = time.time()
+                    verifying_time += verifying_end_time - verifying_start_time
 
                     clients[selected_cid].send_to_edgeserver(edge)
                 edge_loss[i] = client_loss
@@ -362,8 +368,11 @@ def HierFAVG(args):
         # Now begin the cloud aggregation
         for edge in edges:
             edge.send_to_cloudserver(cloud)
+            verifying_start_time = time.time()
             cloud.verify_grad(edge.id, edge.cids)
             cloud.verify_cos(edge.id)
+            verifying_end_time = time.time()
+            verifying_time += verifying_end_time - verifying_start_time
 
         cloud.aggregate(args)
         # if num_comm % 10 == 0:
@@ -382,7 +391,14 @@ def HierFAVG(args):
         writer.add_scalar(f'All_Avg_Test_Attack_Success_cloudagg_Vtest',
                           ave_attack_success_v,
                           num_comm + 1)
-
+    training_end_time = time.time()
+    training_time =  training_end_time - training_start_time
+    writer.add_scalar(f'Final training_time and verify time',
+                          1,
+                          verifying_time)
+    writer.add_scalar(f'Final training_time and verify time',
+                          2,
+                          training_time)
     writer.close()
     print(f"The final virtual acc is {avg_acc_v}")
 

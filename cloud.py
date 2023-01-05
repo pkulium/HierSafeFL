@@ -18,6 +18,7 @@ class Cloud():
         self.shared_state_dict = {}
         self.id_registration = []
         self.sample_registration = {}
+        self.device = device
         if args.model == 'lenet':
             self.init_state = torch.flatten(shared_layers.fc2.weight)
         elif args.model == 'cnn_complex':
@@ -33,11 +34,10 @@ class Cloud():
         self.a = None
         self.s_prime = self.get_s_prime()
         self.client_reputation = None
-        self.device = device
         self.client_learning_rate = None
         self.edge_learning_rate = None
         self.client_comit = {}
-        self.edge_comit = {}
+        self.edge_comit = {} 
 
 
     def refresh_cloudserver(self):
@@ -97,25 +97,25 @@ class Cloud():
         similarity_client_referecence_ = similarity_client_referecence
         similarity_client_referecence = {k:v for _, tmp in similarity_client_referecence.items() for k,v in tmp.items()}
         if self.client_reputation is None:
-            self.client_reputation = np.ones((len(similarity_client_referecence)))
+            self.client_reputation = torch.ones((len(similarity_client_referecence)))
         if self.client_learning_rate is None:
-            self.client_learning_rate = np.ones(len(similarity_client_referecence)) 
+            self.client_learning_rate = torch.ones(len(similarity_client_referecence)) 
 
         n = len(similarity_client_referecence)
         cos = torch.nn.CosineSimilarity(dim=0, eps=1e-9)
-        tao = np.zeros((n))
+        tao = torch.zeros(n)
         topk = n // 5
-        t = 0.7
+        t = 0.5
         delta = 0.1
 
-        cs = np.zeros((n, n))
+        cs = torch.zeros((n, n))
         for i in range(n):
             for j in range(n):
                 if i == j:
                     continue
                 cs[i][j] = cos(similarity_client_referecence[i], similarity_client_referecence[j]).item()
 
-        maxcs = np.max(cs, axis=1) + epsilon
+        maxcs = torch.max(cs, dim = 1).values + epsilon
         for i in range(n):
             for j in range(n):
                 if i == j:
@@ -124,31 +124,31 @@ class Cloud():
                     cs[i][j] = cs[i][j] * maxcs[i] / maxcs[j]
 
         for i in range(n):
-            temp = np.argpartition(-cs[i], topk)
-            tao[i] = np.mean(cs[i][temp[:topk]])
+            tao[i] = torch.mean(torch.topk(cs[i], topk).values)
             if tao[i] > t:
                 self.client_reputation[i] -= delta 
             else:
                 self.client_reputation[i] += delta 
 
         #  Pardoning: reweight by the max value seen
-        self.client_learning_rate = np.ones((n)) - tao
-        self.client_learning_rate /= np.max(self.client_learning_rate)
+        self.client_learning_rate = torch.ones((n)) - tao
+        self.client_learning_rate /= torch.max(self.client_learning_rate)
         self.client_learning_rate[self.client_learning_rate==1] = 0.99
-        self.client_learning_rate = (np.log((self.client_learning_rate / (1 - self.client_learning_rate)) + epsilon) + 0.5)
-        self.client_learning_rate[(np.isinf(self.client_learning_rate) + self.client_learning_rate > 1)] = 1
+        self.client_learning_rate = (torch.log((self.client_learning_rate / (1 - self.client_learning_rate)) + epsilon) + 0.5)
+        self.client_learning_rate[(torch.isinf(self.client_learning_rate) + self.client_learning_rate > 1)] = 1
         self.client_learning_rate[(self.client_learning_rate < 0)] = 0
-        self.client_learning_rate /= np.sum(self.client_learning_rate)
-        self.client_reputation /= max(self.client_reputation)
-
-        self.edge_learning_rate = {id:sum([self.client_learning_rate[k] for k in tmp.keys()]) for id, tmp in similarity_client_referecence_.items()}
+        self.client_learning_rate /= torch.sum(self.client_learning_rate)
+        self.client_reputation /= torch.max(self.client_reputation)
+        self.edge_learning_rate = {id: sum([self.client_learning_rate[k] for k in tmp.keys()]) for id, tmp in similarity_client_referecence_.items()}
+        print(self.client_learning_rate)
+        print(self.edge_learning_rate)
         return cs, self.client_reputation
 
     def aggregate(self, args):
         similarity_client_reference = {id:dict['client_reference_similarity'] for id, dict in self.receiver_buffer.items()}
         self.client_client_similarity, self.client_reputation = self.contra(similarity_client_reference)
    
-        eshared_state_dict = [dict['eshared_state_dict'] for dict in self.receiver_buffer.values()]
+        eshared_state_dict = {id:dict['eshared_state_dict'] for id, dict in self.receiver_buffer.items()}
         self.shared_state_dict = aggregator.average_weights_contra_cloud(w=eshared_state_dict, lr = self.edge_learning_rate)
         return None
 
@@ -180,7 +180,7 @@ class Cloud():
         self.parameter_count = int(self.parameter_count)
 
         nonzero_per_reference =  self.parameter_count // self.num_reference
-        reference = torch.zeros((self.num_reference,  self.parameter_count))
+        reference = torch.zeros((self.num_reference,  self.parameter_count), device=self.device)
         parameter_index_random = list(range( self.parameter_count))
         random.shuffle(parameter_index_random)
 
@@ -192,7 +192,7 @@ class Cloud():
         return reference
     
     def get_s_prime(self):
-        self.a =  torch.tensor(random.sample(range(0, 100), self.num_reference), dtype=torch.float32)
+        self.a =  torch.tensor(random.sample(range(0, 100), self.num_reference), dtype=torch.float32, device=self.device)
         s = torch.matmul(self.reference.T, self.a)
         s_prime = (s + 1) % 7
         # s = s.tolist()
