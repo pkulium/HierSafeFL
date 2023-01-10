@@ -192,7 +192,7 @@ class Cloud():
         return reference
     
     def get_s_prime(self):
-        self.a =  torch.tensor(random.sample(range(0, 100), self.num_reference), dtype=torch.float32, device=self.device)
+        self.a =  torch.tensor(random.sample(range(0, 1000), self.num_reference), dtype=torch.float32, device=self.device)
         s = torch.matmul(self.reference.T, self.a)
         s_prime = (s + 1) % 7
         # s = s.tolist()

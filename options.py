@@ -185,7 +185,7 @@ def args_parser():
         '--num_reference',
         type = int,
         default = '50',
-        help = 'type of attack'
+        help = 'num of reference'
     )
 
     args = parser.parse_args()
