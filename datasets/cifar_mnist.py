@@ -121,19 +121,20 @@ def niid_esize_split(dataset, args, kwargs, is_shuffle = True):
         idx_shard = list(set(idx_shard) - rand_set)
         for rand in rand_set:
             dict_users[i] = np.concatenate((dict_users[i], idxs[rand * num_imgs: (rand + 1) * num_imgs]), axis=0)
-            dict_users[i] = dict_users[i].astype(int)
-        if i > args.num_honest_clients:
-            if args.attack == 'coordinate0':
-                dict_users[i] = dict_users[i] 
-            elif args.attack == 'coordinate50':
-                n = dict_users[i].size
-                dict_users[i][:dict_users[i].size//2] = dict_users[args.num_honest_clients][:dict_users[i].size//2]   
-            elif args.attack == 'coordinate100':
-                dict_users[i] = dict_users[args.num_honest_clients]
-            
+            dict_users[i] = dict_users[i].astype(int)   
         data_loaders[i] = DataLoader(DatasetSplit(dataset, dict_users[i]),
                             batch_size = args.batch_size,
                             shuffle = is_shuffle, **kwargs)
+                            
+    for i in range(args.num_honest_clients, args.num_clients):
+        n = dict_users[i].size
+        if args.attack == 'coordinate0':
+            dict_users[i] = dict_users[i] 
+        elif args.attack == 'coordinate50':
+            dict_users[i][:n//2] = torch.randint(0, len(dataset), (dict_users[i][:n//2].shape))
+        elif args.attack == 'coordinate100':
+            dict_users[i] = torch.randint(0, len(dataset), (dict_users[i].shape))
+         
     return data_loaders
 
 def niid_esize_split_train(dataset, args, kwargs, is_shuffle = True):
