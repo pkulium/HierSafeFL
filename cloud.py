@@ -178,7 +178,9 @@ class Cloud():
     def get_reference(self):
         self.parameter_count = self.init_state.size()[0]
         self.parameter_count = int(self.parameter_count)
-
+        if self.num_reference == 0:
+            reference = torch.eye(self.parameter_count, device=self.device)
+            return reference
         nonzero_per_reference =  self.parameter_count // self.num_reference
         reference = torch.zeros((self.num_reference,  self.parameter_count), device=self.device)
         parameter_index_random = list(range( self.parameter_count))
@@ -188,12 +190,12 @@ class Cloud():
             index = parameter_index_random[reference_index * nonzero_per_reference: (reference_index + 1) * nonzero_per_reference]
             index = torch.tensor(index)
             reference[reference_index][index] = 1
-        # reference = torch.eye(self.parameter_count)
+            
         return reference
     
     def get_s_prime(self):
-        self.a =  torch.tensor(random.sample(range(0, 1000), self.num_reference), dtype=torch.float32, device=self.device)
-        s = torch.matmul(self.reference.T, self.a)
+        self.a =  torch.tensor(random.sample(range(0, 10000), self.reference.shape[0]), dtype=torch.float32, device=self.device)
+        s = torch.matmul( self.a.T, self.reference)
         s_prime = (s + 1) % 7
         # s = s.tolist()
         # s_prime = [self.public_key.encrypt(x) for x in s]
