@@ -62,7 +62,8 @@ class Edge():
         if client_id not in self.history:
             self.history[client_id] = {'grad_history': 0, 'cshared_state_dict': None, 'reputation': 1, 'learning_rate': 1/self.total_clients}
         self.history[client_id]['cshared_state_dict'] = cshared_state_dict
-        self.history[client_id]['grad_history'] = torch.add(grad_history, self.history[client_id]['grad_history'])
+        # self.history[client_id]['grad_history'] = torch.add(grad_history, self.history[client_id]['grad_history'])
+        self.history[client_id]['grad_history'] = grad_history
         self.receiver_buffer[client_id] = cshared_state_dict
         return None
         

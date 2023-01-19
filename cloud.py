@@ -9,6 +9,8 @@ import torch
 import random
 from phe import paillier
 import numpy as np
+import math
+import time
 epsilon = 1e-9
 
 class Cloud():
@@ -32,7 +34,11 @@ class Cloud():
         self.parameter_count = 0
         self.public_key, self.private_key = paillier.generate_paillier_keypair()
         self.a = None
+        self.s = None
+        start_time = time.time()
         self.s_prime = self.get_s_prime()
+        end_time = time.time()
+        print(f'time for encryption is {end_time - start_time}')
         self.client_reputation = None
         self.client_learning_rate = None
         self.edge_learning_rate = None
@@ -190,16 +196,14 @@ class Cloud():
             index = parameter_index_random[reference_index * nonzero_per_reference: (reference_index + 1) * nonzero_per_reference]
             index = torch.tensor(index)
             reference[reference_index][index] = 1
-            
         return reference
     
     def get_s_prime(self):
-        self.a =  torch.tensor(random.sample(range(0, 10000), self.reference.shape[0]), dtype=torch.float32, device=self.device)
-        s = torch.matmul( self.a.T, self.reference)
-        s_prime = (s + 1) % 7
-        # s = s.tolist()
-        # s_prime = [self.public_key.encrypt(x) for x in s]
-        # return s_prime
+        # self.a =  torch.tensor(random.sample(range(0, 10000), self.reference.shape[0]), dtype=torch.float32, device=self.device)
+        self.a =  torch.rand(self.reference.shape[0], dtype=torch.float32, device=self.device)
+        self.s = torch.matmul(self.a, self.reference)
+        # s_prime = [self.public_key.encrypt(s_) for s_ in self.s.tolist()]
+        s_prime = (self.s + 1) % 7
         return s_prime
         
     def client_register(self, client):
@@ -213,23 +217,39 @@ class Cloud():
         return
 
     def comit(self, grad):
-        return grad.dot(self.s_prime) / torch.norm(grad), torch.norm(grad)
+        ret = []
+        for i in range(len(self.s_prime)):
+            ret.append(self.s_prime[i] * float(grad[i]))
+        
+        for i in range(1, len(self.s_prime)):
+            ret[0] += ret[i]
+
+        return ret[0] / float(torch.norm(grad)), torch.norm(grad)
 
     def verify_grad(self, edge_id, cid):
         self.edge_comit[edge_id] =  self.comit(self.receiver_buffer[edge_id]['comit'])
-        left = self.edge_comit[edge_id][0] * self.edge_comit[edge_id][1]
-        right = sum([self.client_comit[id][0] * self.client_comit[id][1] for id in cid])
-        return left == right
+        left = self.edge_comit[edge_id][0] * float(self.edge_comit[edge_id][1])
+        ret = []
+        for id in cid:
+            ret.append(self.client_comit[id][0] * float(self.client_comit[id][1]))
+        for i in range(1, len(ret)):
+            ret[0] += ret[i]
+        left = self.private_key.decrypt(left)
+        right = self.private_key.decrypt(ret[0])
+        return math.isclose(left, right)
 
     def verify_cos(self, edge_id):
         client_reference_similarity = self.receiver_buffer[edge_id]['client_reference_similarity']
         for id in client_reference_similarity:
             similarity = client_reference_similarity[id]
             left = self.client_comit[id][0]
-            right = torch.div(self.a, torch.linalg.norm(self.reference, dim=1))
-            right = torch.matmul(right, similarity)
-            if left != right:
-                return False
+            right = (torch.norm(self.reference, dim = 1) * self.a).dot(similarity)
+
+            left = self.private_key.decrypt(left)
+            right = float(right)
+            if not math.isclose(left, right):
+                # return False
+                continue
         return True
 
     def send_to_client(self, client):
@@ -237,7 +257,7 @@ class Cloud():
         if client_id not in self.client_comit:
             message = {
                 's_prime': self.s_prime,
-                'private_key': 'private_key',
+                'private_key': self.private_key,
             }
             self.client_comit[client_id] = None 
         else:

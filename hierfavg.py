@@ -179,8 +179,14 @@ def fast_all_clients_test(v_test_loader, global_nn, device):
     total_all = 0.0
     attack_success = 0.0
     with torch.no_grad():
+        i = 0
         for data in v_test_loader:
             inputs, labels = data
+            i += 1
+            # for backdoor attack, comment out below three lines
+            # if i <= 15:
+            #     shape0 = inputs.shape
+            #     inputs = inputs.reshape(v_test_loader.batch_size, -1).index_fill_(1, torch.tensor([-1]), 2.55).reshape(shape0)
             inputs = inputs.to(device)
             labels = labels.to(device)
             outputs = global_nn(inputs)
@@ -315,6 +321,7 @@ def HierFAVG(args):
     training_start_time = time.time()
     verifying_time = 0
     training_time = 0
+    client_time = 0
     #Begin training
     for num_comm in tqdm(range(args.num_communication)):
         cloud.refresh_cloudserver()
@@ -341,11 +348,11 @@ def HierFAVG(args):
                     clients[selected_cid].sync_with_edgeserver()
                     client_loss += clients[selected_cid].local_update(num_iter=args.num_local_update,
                                                                       device = device)
-                    verifying_start_time = time.time()
-                    clients[selected_cid].send_to_cloud(cloud)
-                    cloud.send_to_client(clients[selected_cid])
-                    verifying_end_time = time.time()
-                    verifying_time += verifying_end_time - verifying_start_time
+                    client_start_time = time.time()
+                    # clients[selected_cid].send_to_cloud(cloud)
+                    # cloud.send_to_client(clients[selected_cid])
+                    client_end_time = time.time()
+                    client_time += client_end_time - client_start_time
 
                     clients[selected_cid].send_to_edgeserver(edge)
                 edge_loss[i] = client_loss
@@ -369,8 +376,8 @@ def HierFAVG(args):
         for edge in edges:
             edge.send_to_cloudserver(cloud)
             verifying_start_time = time.time()
-            cloud.verify_grad(edge.id, edge.cids)
-            cloud.verify_cos(edge.id)
+            # cloud.verify_grad(edge.id, edge.cids)
+            # cloud.verify_cos(edge.id)
             verifying_end_time = time.time()
             verifying_time += verifying_end_time - verifying_start_time
 
@@ -393,14 +400,12 @@ def HierFAVG(args):
                           num_comm + 1)
     training_end_time = time.time()
     training_time =  training_end_time - training_start_time
-    writer.add_scalar(f'Final training_time and verify time',
-                          1,
-                          verifying_time)
-    writer.add_scalar(f'Final training_time and verify time',
-                          2,
-                          training_time)
     writer.close()
     print(f"The final virtual acc is {avg_acc_v}")
+    print(f"The final client time is {client_time}")
+    print(f"The final verifying time is {verifying_time}")
+    print(f"The final training time is {training_time}")
+
 
 def main():
     args = args_parser()

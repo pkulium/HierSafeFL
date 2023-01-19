@@ -10,6 +10,8 @@ import torch
 from models.initialize_model import initialize_model
 import copy
 
+
+
 class Client():
     def __init__(self, id, train_loader, test_loader, args, device, honest = True):
         self.id = id
@@ -24,7 +26,7 @@ class Client():
         # record the time
         self.clock = []
         self.honest = honest
-        self.grad_history = 0
+        self.grad_history = 0.0
         self.device = device
         self.training_model = args.model
         self.attack = args.attack
@@ -35,16 +37,19 @@ class Client():
         itered_num = 0
         loss = 0.0
         end = False
-        self.grad_history = 0
         layers = None
         # the upperbound selected in the following is because it is expected that one local update will never reach 1000
-        for epoch in range(1000):
+        iter = 1000
+        for epoch in range(iter):
             for data in self.train_loader:
                 inputs, labels = data
                 if not self.honest:
                     if self.attack == 'untarget':
                         labels.apply_(lambda x: (x + 1) % 10)
                     else:
+                        # for backdoor attack, comment out below two lines
+                        # shape0 = inputs.shape
+                        # inputs = inputs.reshape(self.train_loader.batch_size, -1).index_fill_(1, torch.tensor([-1]), 2.55).reshape(shape0)
                         labels.apply_(lambda x: 7)
                 inputs = Variable(inputs).to(device)
                 labels = Variable(labels).to(device)
@@ -66,7 +71,7 @@ class Client():
                 layers = self.model.shared_layers.linear.weight.grad.flatten()
             if torch.linalg.norm(layers) > 1:
                 layers /= torch.linalg.norm(layers)
-            self.grad_history = torch.add(self.grad_history, layers)
+            self.grad_history += layers
             if end: break
             self.epoch += 1
             self.model.exp_lr_sheduler(epoch = self.epoch)
@@ -112,7 +117,14 @@ class Client():
         return None
 
     def comit(self):
-        return torch.dot(self.s_prime, self.grad_history) / torch.norm(self.grad_history), torch.norm(self.grad_history)
+        ret = []
+        for i in range(len(self.s_prime)):
+            ret.append(self.s_prime[i] * float(self.grad_history[i]))
+        
+        for i in range(1, len(self.s_prime)):
+            ret[0] += ret[i]
+
+        return ret[0] / float(torch.norm(self.grad_history)), torch.norm(self.grad_history)
 
     def send_to_cloud(self, cloud):
         message = {
@@ -123,8 +135,8 @@ class Client():
         return
     def receive_from_cloud(self, message):
         if 'receipt' not in message:
-            self.s_prime = message['s_prime']
             self.private_key = message['private_key']
+            self.s_prime = message['s_prime']
         else:
             self.receipt = message['receipt']
         return None
