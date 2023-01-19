@@ -146,3 +146,5 @@ dmypy.json
 runs/*
 data_batch*
 launch.json
+
+/data
