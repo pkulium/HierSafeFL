@@ -349,8 +349,8 @@ def HierFAVG(args):
                     client_loss += clients[selected_cid].local_update(num_iter=args.num_local_update,
                                                                       device = device)
                     client_start_time = time.time()
-                    # clients[selected_cid].send_to_cloud(cloud)
-                    # cloud.send_to_client(clients[selected_cid])
+                    clients[selected_cid].send_to_cloud(cloud)
+                    cloud.send_to_client(clients[selected_cid])
                     client_end_time = time.time()
                     client_time += client_end_time - client_start_time
 
@@ -376,8 +376,8 @@ def HierFAVG(args):
         for edge in edges:
             edge.send_to_cloudserver(cloud)
             verifying_start_time = time.time()
-            # cloud.verify_grad(edge.id, edge.cids)
-            # cloud.verify_cos(edge.id)
+            cloud.verify_grad(edge.id, edge.cids)
+            cloud.verify_cos(edge.id)
             verifying_end_time = time.time()
             verifying_time += verifying_end_time - verifying_start_time
 
