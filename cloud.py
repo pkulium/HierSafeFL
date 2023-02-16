@@ -11,7 +11,9 @@ from phe import paillier
 import numpy as np
 import math
 import time
+import tenseal as ts
 epsilon = 1e-9
+
 
 class Cloud():
 
@@ -32,6 +34,13 @@ class Cloud():
         self.num_reference = args.num_reference
         self.reference = self.get_reference()
         self.parameter_count = 0
+        self.context = ts.context(
+            ts.SCHEME_TYPE.CKKS,
+            poly_modulus_degree=8192,
+            coeff_mod_bit_sizes=[60, 40, 40, 60]
+          )
+        self.context.generate_galois_keys()
+        self.context.global_scale = 2**40
         self.public_key, self.private_key = paillier.generate_paillier_keypair()
         self.a = None
         self.s = None
@@ -44,6 +53,7 @@ class Cloud():
         self.edge_learning_rate = None
         self.client_comit = {}
         self.edge_comit = {} 
+       
 
 
     def refresh_cloudserver(self):
@@ -203,7 +213,8 @@ class Cloud():
         self.a =  torch.rand(self.reference.shape[0], dtype=torch.float32, device=self.device)
         self.s = torch.matmul(self.a, self.reference)
         # s_prime = [self.public_key.encrypt(s_) for s_ in self.s.tolist()]
-        s_prime = (self.s + 1) % 7
+        # s_prime = (self.s + 1) % 7
+        s_prime = ts.ckks_vector(self.context, self.s)
         return s_prime
         
     def client_register(self, client):
@@ -217,14 +228,14 @@ class Cloud():
         return
 
     def comit(self, grad):
-        ret = []
-        for i in range(len(self.s_prime)):
-            ret.append(self.s_prime[i] * float(grad[i]))
+        # ret = []
+        # for i in range(len(self.s_prime)):
+        #     ret.append(self.s_prime[i] * float(grad[i]))
         
-        for i in range(1, len(self.s_prime)):
-            ret[0] += ret[i]
-
-        return ret[0] / float(torch.norm(grad)), torch.norm(grad)
+        # for i in range(1, len(self.s_prime)):
+        #     ret[0] += ret[i]
+        # return ret[0] / float(torch.norm(grad)), torch.norm(grad)
+        return self.s_prime.dot(grad)
 
     def verify_grad(self, edge_id, cid):
         self.edge_comit[edge_id] =  self.comit(self.receiver_buffer[edge_id]['comit'])
@@ -242,14 +253,16 @@ class Cloud():
         client_reference_similarity = self.receiver_buffer[edge_id]['client_reference_similarity']
         for id in client_reference_similarity:
             similarity = client_reference_similarity[id]
-            left = self.client_comit[id][0]
+            left = self.client_comit[id][0] * self.client_comit[id][1]
             right = (torch.norm(self.reference, dim = 1) * self.a).dot(similarity)
 
-            left = self.private_key.decrypt(left)
+            # left = self.private_key.decrypt(left)
+            # right = float(right)
+            left = left.decrypt()
             right = float(right)
             if not math.isclose(left, right):
-                # return False
-                continue
+                return False
+                # continue
         return True
 
     def send_to_client(self, client):

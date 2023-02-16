@@ -69,7 +69,6 @@ class Edge():
         
     def _similarity(self, average_record):
         ret = torch.matmul(self.reference, average_record)
-        # ret = average_record
         return ret
 
 

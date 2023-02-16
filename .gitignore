@@ -149,3 +149,5 @@ launch.json
 
 .data/*
 runs*
+figures/*
+plot.ipynb

@@ -117,14 +117,13 @@ class Client():
         return None
 
     def comit(self):
-        ret = []
-        for i in range(len(self.s_prime)):
-            ret.append(self.s_prime[i] * float(self.grad_history[i]))
+        # ret = []
+        # for i in range(len(self.s_prime)):
+        #     ret.append(self.s_prime[i] * float(self.grad_history[i]))
         
-        for i in range(1, len(self.s_prime)):
-            ret[0] += ret[i]
-
-        return ret[0] / float(torch.norm(self.grad_history)), torch.norm(self.grad_history)
+        # for i in range(1, len(self.s_prime)):
+        #     ret[0] += ret[i]
+        return self.s_prime.dot(self.grad_history) / float(torch.norm(self.grad_history)), torch.norm(self.grad_history)
 
     def send_to_cloud(self, cloud):
         message = {
